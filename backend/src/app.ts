@@ -18,13 +18,24 @@ import adminRoutes from "./routes/admin.js";
 import resolvrRoutes from "./routes/resolvr.js";
 import storeRoutes from "./routes/store.js";
 
+const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim());
+
 export function createApp() {
   const app = express();
+
+  // Railway (and most PaaS) terminate TLS at a proxy in front of the app.
+  app.set("trust proxy", 1);
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin(origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error(`Origin ${origin} not allowed by CORS`));
+        }
+      },
       credentials: true,
     }),
   );

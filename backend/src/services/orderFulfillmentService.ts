@@ -123,7 +123,7 @@ export async function notifyOrderConfirmed(
         sentAt: new Date(),
       },
     ],
-    { session },
+    { session, ordered: true },
   );
 }
 

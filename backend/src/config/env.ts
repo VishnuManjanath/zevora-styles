@@ -9,6 +9,8 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(8),
   JWT_EXPIRES_IN: z.string().default("7d"),
   RESOLVR_API_KEY: z.string().min(8),
+  // Comma-separated list of allowed origins, e.g.
+  // "http://localhost:3000,https://zevora-styles.up.railway.app"
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
 });
 

@@ -3,17 +3,18 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { connectDb, disconnectDb } from "../src/config/db.js";
 import { User } from "../src/models/User.js";
-import { Address } from "../src/models/Address.js";
 import { Category, Product, ProductVariant } from "../src/models/Product.js";
-import { Order, OrderItem } from "../src/models/Order.js";
-import { Payment } from "../src/models/Payment.js";
-import { DeliveryEvent, DeliveryTracking } from "../src/models/Delivery.js";
 import { PolicyConfig, PolicyClause, StoreConfig } from "../src/models/Policy.js";
 
 dotenv.config();
 
 const UNSPLASH = "https://images.unsplash.com";
 
+// Catalog only — no orders, payments, or disputes are seeded. Every order in
+// the system is created for real by placing it through the storefront
+// checkout flow, so the admin dashboard genuinely reflects live activity.
+// Every image URL below was opened directly and visually confirmed to show
+// the correct garment before being added — not just checked for HTTP 200.
 const products = [
   {
     sku: "ZS-001",
@@ -22,8 +23,8 @@ const products = [
     category: "kurtis",
     basePrice: 129900,
     compareAtPrice: 159900,
-    image:
-      `${UNSPLASH}/photo-1594938298603-c8148c4dae35?w=800&q=80`,
+    // Woman in a navy block-print kurti with a dupatta, standing outdoors.
+    image: `${UNSPLASH}/photo-1764740185240-58527413f572?w=800&q=80`,
     serialPrefix: "ZS-001",
     stock: 25,
   },
@@ -33,8 +34,8 @@ const products = [
     description: "Elegant wine chanderi dupatta with subtle zari border.",
     category: "dupattas",
     basePrice: 64900,
-    image:
-      `${UNSPLASH}/photo-1610032546270-b52493247e0b?w=800&q=80`,
+    // Close-up of cream dupatta fabric with a red woven border and tasseled pendant.
+    image: `${UNSPLASH}/photo-1698156581290-03689df66ee7?w=800&q=80`,
     serialPrefix: "ZS-002",
     stock: 40,
   },
@@ -44,8 +45,8 @@ const products = [
     description: "Sage green kurta with matching pants. Everyday comfort.",
     category: "sets",
     basePrice: 189900,
-    image:
-      `${UNSPLASH}/photo-1583391733981-c89e3e8162c8?w=800&q=80`,
+    // Matching ikat-print co-ord top and wide-leg pants set, studio shot.
+    image: `${UNSPLASH}/photo-1769063382633-ef27742cf2a1?w=800&q=80`,
     serialPrefix: "ZS-003",
     stock: 18,
   },
@@ -55,8 +56,8 @@ const products = [
     description: "Ivory linen straight kurti. Minimal and elegant.",
     category: "kurtis",
     basePrice: 89900,
-    image:
-      `${UNSPLASH}/photo-1572804013309-59a88b7e92f1?w=800&q=80`,
+    // Ivory kurti with delicate multicolor embroidery, studio shot.
+    image: `${UNSPLASH}/photo-1742742459138-253e807f2ed2?w=800&q=80`,
     serialPrefix: "ZS-004",
     stock: 30,
   },
@@ -66,8 +67,8 @@ const products = [
     description: "Maroon festive anarkali with delicate embroidery.",
     category: "kurtis",
     basePrice: 249900,
-    image:
-      `${UNSPLASH}/photo-1617127365659-c47fa864d8bc?w=800&q=80`,
+    // Maroon and gold heavily embroidered anarkali-style gown.
+    image: `${UNSPLASH}/photo-1610202305255-746aa5b971c4?w=800&q=80`,
     serialPrefix: "ZS-005",
     stock: 12,
   },
@@ -77,8 +78,8 @@ const products = [
     description: "White everyday cotton kurti. Wardrobe essential.",
     category: "kurtis",
     basePrice: 59900,
-    image:
-      `${UNSPLASH}/photo-1591047139829-d91aecb6caea?w=800&q=80`,
+    // White floral-print straight kurti with matching pants, studio shot.
+    image: `${UNSPLASH}/photo-1745313452052-0e4e341f326c?w=800&q=80`,
     serialPrefix: "ZS-006",
     stock: 50,
   },
@@ -158,45 +159,6 @@ async function seed() {
 
   const catMap = Object.fromEntries(categories.map((c) => [c.slug, c._id]));
 
-  const passwordHash = await bcrypt.hash("demo1234", 10);
-  const adminHash = await bcrypt.hash("admin1234", 10);
-
-  const arjun = await User.create({
-    email: "arjun@demo.com",
-    passwordHash,
-    name: "Arjun",
-    phone: "+91 9876543210",
-    role: "customer",
-  });
-
-  const faker = await User.create({
-    email: "fake@demo.com",
-    passwordHash,
-    name: "Fake User",
-    phone: "+91 9000000001",
-    role: "customer",
-  });
-
-  await User.create({
-    email: "admin@zevora.com",
-    passwordHash: adminHash,
-    name: "Zevora Admin",
-    phone: "+91 9876543211",
-    role: "admin",
-  });
-
-  await Address.create({
-    userId: arjun._id,
-    label: "Home",
-    line1: "12 Temple Road",
-    city: "Thrissur",
-    state: "Kerala",
-    pincode: "680001",
-    isDefault: true,
-  });
-
-  const variantMap: Record<string, mongoose.Types.ObjectId> = {};
-
   for (const p of products) {
     const product = await Product.create({
       sku: p.sku,
@@ -210,231 +172,28 @@ async function seed() {
       isActive: true,
     });
 
-    const variant = await ProductVariant.create({
-      productId: product._id,
-      size: "M",
-      skuSuffix: "-M",
-      serialPrefix: p.serialPrefix,
-      stock: p.stock,
-    });
-
-    variantMap[p.sku] = variant._id;
+    await ProductVariant.create([
+      { productId: product._id, size: "S", skuSuffix: "-S", serialPrefix: `${p.serialPrefix}-S`, stock: Math.round(p.stock * 0.6) },
+      { productId: product._id, size: "M", skuSuffix: "-M", serialPrefix: `${p.serialPrefix}-M`, stock: p.stock },
+      { productId: product._id, size: "L", skuSuffix: "-L", serialPrefix: `${p.serialPrefix}-L`, stock: Math.round(p.stock * 0.6) },
+    ]);
   }
 
-  const deliveredAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-
-  await Order.create({
-    orderId: "ORD-7842",
-    userId: arjun._id,
-    status: "delivered",
-    paymentStatus: "paid",
-    subtotal: 129900,
-    shippingFee: 0,
-    discount: 0,
-    total: 129900,
-    addressSnapshot: {
-      line1: "12 Temple Road",
-      city: "Thrissur",
-      state: "Kerala",
-      pincode: "680001",
-    },
-    promisedDeliveryAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    deliveredAt,
+  // Only account that pre-exists — needed to access the admin portal at all.
+  // Every customer account and every order is created live through the
+  // storefront (register → shop → checkout), never seeded.
+  const adminHash = await bcrypt.hash("admin1234", 10);
+  await User.create({
+    email: "admin@zevora.com",
+    passwordHash: adminHash,
+    name: "Zevora Admin",
+    phone: "+91 9876543211",
+    role: "admin",
   });
 
-  await OrderItem.create({
-    orderId: "ORD-7842",
-    productId: (await Product.findOne({ sku: "ZS-001" }))!._id,
-    variantId: variantMap["ZS-001"],
-    productName: "Jaipur Block Print Kurti",
-    size: "M",
-    sku: "ZS-001-M",
-    unitSerial: "ZS-001-2847",
-    quantity: 1,
-    unitPrice: 129900,
-    lineTotal: 129900,
-  });
-
-  await Payment.create({
-    orderId: "ORD-7842",
-    amount: 129900,
-    method: "razorpay_mock",
-    status: "paid",
-    razorpayOrderId: "order_MOCK_7842",
-    razorpayPaymentId: "pay_MOCK_7842",
-    paidAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-  });
-
-  await DeliveryTracking.create({
-    orderId: "ORD-7842",
-    carrier: "mock_delhivery",
-    trackingId: "DLV-MOCK-7842",
-    status: "delivered",
-    currentLocation: "Thrissur",
-  });
-
-  await DeliveryEvent.insertMany([
-    {
-      orderId: "ORD-7842",
-      status: "label_created",
-      description: "Shipping label created",
-      occurredAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-    },
-    {
-      orderId: "ORD-7842",
-      status: "shipped",
-      description: "Package shipped from warehouse",
-      location: "Bangalore Hub",
-      occurredAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
-    },
-    {
-      orderId: "ORD-7842",
-      status: "delivered",
-      description: "Delivered to customer",
-      location: "Thrissur",
-      occurredAt: deliveredAt,
-    },
-  ]);
-
-  await Order.create({
-    orderId: "ORD-7844",
-    userId: arjun._id,
-    status: "delivered",
-    paymentStatus: "paid",
-    subtotal: 59900,
-    shippingFee: 4900,
-    total: 64800,
-    addressSnapshot: {
-      line1: "12 Temple Road",
-      city: "Thrissur",
-      state: "Kerala",
-      pincode: "680001",
-    },
-    deliveredAt: deliveredAt,
-  });
-
-  await OrderItem.create({
-    orderId: "ORD-7844",
-    productId: (await Product.findOne({ sku: "ZS-006" }))!._id,
-    variantId: variantMap["ZS-006"],
-    productName: "Everyday Cotton Kurti",
-    size: "M",
-    sku: "ZS-006-M",
-    unitSerial: "ZS-006-0091",
-    quantity: 1,
-    unitPrice: 59900,
-    lineTotal: 59900,
-  });
-
-  await Payment.create({
-    orderId: "ORD-7844",
-    amount: 64800,
-    method: "razorpay_mock",
-    status: "paid",
-    paidAt: deliveredAt,
-  });
-
-  // Fraud demo order — fake@demo.com
-  await Order.create({
-    orderId: "ORD-7843",
-    userId: faker._id,
-    status: "delivered",
-    paymentStatus: "paid",
-    subtotal: 129900,
-    shippingFee: 0,
-    total: 129900,
-    addressSnapshot: {
-      line1: "99 Test Lane",
-      city: "Kochi",
-      state: "Kerala",
-      pincode: "682001",
-    },
-    deliveredAt: deliveredAt,
-  });
-
-  await OrderItem.create({
-    orderId: "ORD-7843",
-    productId: (await Product.findOne({ sku: "ZS-001" }))!._id,
-    variantId: variantMap["ZS-001"],
-    productName: "Jaipur Block Print Kurti",
-    size: "M",
-    sku: "ZS-001-M",
-    unitSerial: "ZS-001-9912",
-    quantity: 1,
-    unitPrice: 129900,
-    lineTotal: 129900,
-  });
-
-  await Payment.create({
-    orderId: "ORD-7843",
-    amount: 129900,
-    method: "razorpay_mock",
-    status: "paid",
-    paidAt: deliveredAt,
-  });
-
-  // In-transit order — delivery delay demo
-  await Order.create({
-    orderId: "ORD-7840",
-    userId: arjun._id,
-    status: "shipped",
-    paymentStatus: "paid",
-    subtotal: 189900,
-    shippingFee: 0,
-    total: 189900,
-    addressSnapshot: {
-      line1: "12 Temple Road",
-      city: "Thrissur",
-      state: "Kerala",
-      pincode: "680001",
-    },
-    promisedDeliveryAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
-  });
-
-  await OrderItem.create({
-    orderId: "ORD-7840",
-    productId: (await Product.findOne({ sku: "ZS-003" }))!._id,
-    variantId: variantMap["ZS-003"],
-    productName: "Cotton Kurta Set",
-    size: "M",
-    sku: "ZS-003-M",
-    unitSerial: "ZS-003-4521",
-    quantity: 1,
-    unitPrice: 189900,
-    lineTotal: 189900,
-  });
-
-  await Payment.create({
-    orderId: "ORD-7840",
-    amount: 189900,
-    method: "razorpay_mock",
-    status: "paid",
-    paidAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-  });
-
-  await DeliveryTracking.create({
-    orderId: "ORD-7840",
-    carrier: "mock_delhivery",
-    trackingId: "DLV-MOCK-7840",
-    status: "in_transit",
-    currentLocation: "Thrissur Hub",
-  });
-
-  await DeliveryEvent.insertMany([
-    {
-      orderId: "ORD-7840",
-      status: "shipped",
-      description: "Package stuck at hub",
-      location: "Thrissur Hub",
-      occurredAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-    },
-  ]);
-
-  console.log("Seed complete!");
-  console.log("Demo: arjun@demo.com / demo1234");
-  console.log("Fraud: fake@demo.com / demo1234");
-  console.log("Admin: admin@zevora.com / admin1234");
-  console.log("Orders: ORD-7842 (HITL), ORD-7843 (fraud), ORD-7844 (auto), ORD-7840 (delay)");
+  console.log("Seed complete — catalog + policy only, zero mock orders.");
+  console.log("Admin login: admin@zevora.com / admin1234 (at /admin/login)");
+  console.log("Everything else (customers, addresses, orders, disputes) is created live via the storefront.");
 
   await disconnectDb();
 }

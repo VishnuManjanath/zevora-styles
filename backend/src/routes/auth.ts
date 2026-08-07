@@ -8,6 +8,7 @@ import {
 import { mergeGuestCart } from "../services/cartService.js";
 import type { AuthRequest } from "../middleware/auth.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { Errors } from "../utils/errors.js";
 
 const router = Router();
 
@@ -21,6 +22,10 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  // Which portal the login attempt came from. When present, the account's
+  // role must match — keeps admin accounts out of the storefront login and
+  // customer accounts out of the admin portal, enforced server-side.
+  portal: z.enum(["customer", "admin"]).optional(),
 });
 
 router.post("/register", async (req, res, next) => {
@@ -38,6 +43,15 @@ router.post("/login", async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
     const { user, token } = await loginUser(body.email, body.password);
+
+    if (body.portal === "admin" && user.role !== "admin") {
+      throw Errors.forbidden("This account does not have admin access.");
+    }
+    if (body.portal === "customer" && user.role === "admin") {
+      throw Errors.forbidden(
+        "Admin accounts must sign in at the Admin Portal.",
+      );
+    }
 
     const sessionId = req.headers["x-session-id"] as string | undefined;
     if (sessionId) {

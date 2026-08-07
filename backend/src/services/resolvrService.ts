@@ -150,7 +150,7 @@ export async function issueRefund(data: {
           sentAt: new Date(),
         },
       ],
-      { session },
+      { session, ordered: true },
     );
 
     await AuditLog.create(
