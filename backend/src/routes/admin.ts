@@ -15,6 +15,7 @@ import {
 import { getOrderDetail } from "../services/orderService.js";
 import { adminIssueRefund } from "../services/resolvrService.js";
 import { Errors } from "../utils/errors.js";
+import { routeParam } from "../utils/routeParam.js";
 
 const router = Router();
 
@@ -71,6 +72,20 @@ router.patch("/products/:id", async (req, res, next) => {
     const product = await Product.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     });
+    if (!product) throw Errors.notFound("Product not found");
+    res.json({ product });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/products/:id", async (req, res, next) => {
+  try {
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true },
+    );
     if (!product) throw Errors.notFound("Product not found");
     res.json({ product });
   } catch (err) {
@@ -162,9 +177,8 @@ router.get("/disputes", async (_req, res, next) => {
 
 router.get("/disputes/:id", async (req, res, next) => {
   try {
-    const dispute = await Dispute.findById(req.params.id).lean();
-    if (!dispute) throw Errors.notFound("Dispute not found");
-    res.json({ dispute });
+    const { getDisputeDetail } = await import("../services/disputeService.js");
+    res.json(await getDisputeDetail(routeParam(req.params.id)));
   } catch (err) {
     next(err);
   }
@@ -172,7 +186,7 @@ router.get("/disputes/:id", async (req, res, next) => {
 
 router.post("/disputes/:id/hitl-approve", async (req: AuthRequest, res, next) => {
   try {
-    const result = await hitlApprove(req.params.id, req.user!._id);
+    const result = await hitlApprove(routeParam(req.params.id), req.user!._id);
     res.json({
       dispute: result.dispute,
       hitlApprovalToken: result.hitlApprovalToken,
@@ -184,7 +198,7 @@ router.post("/disputes/:id/hitl-approve", async (req: AuthRequest, res, next) =>
 
 router.post("/disputes/:id/hitl-reject", async (req, res, next) => {
   try {
-    res.json({ dispute: await hitlReject(req.params.id) });
+    res.json({ dispute: await hitlReject(routeParam(req.params.id)) });
   } catch (err) {
     next(err);
   }
@@ -260,7 +274,7 @@ router.get("/refunds", async (_req, res, next) => {
   }
 });
 
-router.post("/refunds", async (req, res, next) => {
+router.post("/refunds", async (req: AuthRequest, res, next) => {
   try {
     const body = z.object({
       orderId: z.string(),

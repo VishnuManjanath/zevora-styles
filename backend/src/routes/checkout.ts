@@ -95,9 +95,16 @@ router.post("/checkout/preview", async (req: AuthRequest, res, next) => {
 
 router.post("/checkout/create-order", async (req: AuthRequest, res, next) => {
   try {
-    const body = z.object({ addressId: z.string() }).parse(req.body);
-    const { order, preview } = await createOrder(req.user!._id, body.addressId);
-    res.status(201).json({ order, preview });
+    const body = z.object({
+      addressId: z.string(),
+      paymentMethod: z.enum(["razorpay_mock", "cod"]).optional(),
+    }).parse(req.body);
+    const result = await createOrder(
+      req.user!._id,
+      body.addressId,
+      body.paymentMethod ?? "razorpay_mock",
+    );
+    res.status(201).json(result);
   } catch (err) {
     next(err);
   }

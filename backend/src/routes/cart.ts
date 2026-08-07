@@ -9,6 +9,7 @@ import {
   removeCartItem,
   clearCart,
 } from "../services/cartService.js";
+import { routeParam } from "../utils/routeParam.js";
 
 const router = Router();
 
@@ -19,8 +20,7 @@ function cartContext(req: AuthRequest) {
 
 router.get("/", optionalAuth, async (req: AuthRequest, res, next) => {
   try {
-    const ctx = cartContext(req);
-    res.json(await getCart(ctx.userId, ctx.sessionId));
+    res.json(await getCart(cartContext(req)));
   } catch (err) {
     next(err);
   }
@@ -31,9 +31,8 @@ router.post("/items", optionalAuth, async (req: AuthRequest, res, next) => {
     const body = z
       .object({ variantId: z.string(), quantity: z.number().int().min(1) })
       .parse(req.body);
-    const ctx = cartContext(req);
     res.json(
-      await addToCart(ctx.userId, ctx.sessionId, body.variantId, body.quantity),
+      await addToCart(cartContext(req), body.variantId, body.quantity),
     );
   } catch (err) {
     next(err);
@@ -43,12 +42,10 @@ router.post("/items", optionalAuth, async (req: AuthRequest, res, next) => {
 router.patch("/items/:variantId", optionalAuth, async (req: AuthRequest, res, next) => {
   try {
     const body = z.object({ quantity: z.number().int().min(0) }).parse(req.body);
-    const ctx = cartContext(req);
     res.json(
       await updateCartItem(
-        ctx.userId,
-        ctx.sessionId,
-        req.params.variantId,
+        cartContext(req),
+        routeParam(req.params.variantId),
         body.quantity,
       ),
     );
@@ -59,9 +56,8 @@ router.patch("/items/:variantId", optionalAuth, async (req: AuthRequest, res, ne
 
 router.delete("/items/:variantId", optionalAuth, async (req: AuthRequest, res, next) => {
   try {
-    const ctx = cartContext(req);
     res.json(
-      await removeCartItem(ctx.userId, ctx.sessionId, req.params.variantId),
+      await removeCartItem(cartContext(req), routeParam(req.params.variantId)),
     );
   } catch (err) {
     next(err);
@@ -70,8 +66,7 @@ router.delete("/items/:variantId", optionalAuth, async (req: AuthRequest, res, n
 
 router.delete("/", optionalAuth, async (req: AuthRequest, res, next) => {
   try {
-    const ctx = cartContext(req);
-    res.json(await clearCart(ctx.userId, ctx.sessionId));
+    res.json(await clearCart(cartContext(req)));
   } catch (err) {
     next(err);
   }

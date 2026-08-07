@@ -1,10 +1,17 @@
 import type { Types } from "mongoose";
+import mongoose from "mongoose";
 import { Address } from "../models/Address.js";
 import { StoreConfig } from "../models/Policy.js";
 import { Product, ProductVariant } from "../models/Product.js";
 import { Cart } from "../models/Cart.js";
-import { Order, OrderItem } from "../models/Order.js";
+import { Order } from "../models/Order.js";
 import { Payment } from "../models/Payment.js";
+import { AuditLog } from "../models/Notification.js";
+import {
+  fulfillOrderFromCart,
+  seedDeliveryForOrder,
+  notifyOrderConfirmed,
+} from "./orderFulfillmentService.js";
 import { generateOrderId } from "../utils/helpers.js";
 import { Errors } from "../utils/errors.js";
 
@@ -39,6 +46,13 @@ export async function previewCheckout(userId: Types.ObjectId, addressId?: string
     const product = await Product.findById(item.productId);
     if (!variant || !product) continue;
 
+    if (variant.stock < item.quantity) {
+      throw Errors.badRequest(
+        "INSUFFICIENT_STOCK",
+        `${product.name} (${variant.size}) is out of stock`,
+      );
+    }
+
     const unitPrice = variant.priceOverride ?? product.basePrice;
     const lineTotal = unitPrice * item.quantity;
     subtotal += lineTotal;
@@ -71,42 +85,102 @@ export async function previewCheckout(userId: Types.ObjectId, addressId?: string
     total,
     freeShippingMin: store.freeShippingMin,
     address,
+    paymentMethods: ["razorpay_mock", "cod"],
   };
 }
 
-export async function createOrder(userId: Types.ObjectId, addressId: string) {
+export async function createOrder(
+  userId: Types.ObjectId,
+  addressId: string,
+  paymentMethod: "razorpay_mock" | "cod" = "razorpay_mock",
+) {
   const address = await Address.findOne({ _id: addressId, userId });
   if (!address) throw Errors.notFound("Address not found");
 
   const preview = await previewCheckout(userId, addressId);
   const orderId = generateOrderId();
 
-  const order = await Order.create({
-    orderId,
-    userId,
-    status: "pending",
-    paymentStatus: "pending",
-    subtotal: preview.subtotal,
-    shippingFee: preview.shippingFee,
-    discount: 0,
-    total: preview.total,
-    addressSnapshot: {
-      line1: address.line1,
-      line2: address.line2,
-      city: address.city,
-      state: address.state,
-      pincode: address.pincode,
-      label: address.label,
-    },
-    promisedDeliveryAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-  });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  await Payment.create({
-    orderId,
-    amount: preview.total,
-    method: "razorpay_mock",
-    status: "pending",
-  });
+  try {
+    const order = await Order.create(
+      [
+        {
+          orderId,
+          userId,
+          status: "pending",
+          paymentStatus: "pending",
+          subtotal: preview.subtotal,
+          shippingFee: preview.shippingFee,
+          discount: 0,
+          total: preview.total,
+          addressSnapshot: {
+            line1: address.line1,
+            line2: address.line2,
+            city: address.city,
+            state: address.state,
+            pincode: address.pincode,
+            label: address.label,
+          },
+          promisedDeliveryAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        },
+      ],
+      { session },
+    );
 
-  return { order, preview };
+    await Payment.create(
+      [
+        {
+          orderId,
+          amount: preview.total,
+          method: paymentMethod,
+          status: "pending",
+        },
+      ],
+      { session },
+    );
+
+    const orderDoc = order[0];
+
+    if (paymentMethod === "cod") {
+      orderDoc.status = "confirmed";
+      orderDoc.paymentStatus = "pending";
+      await fulfillOrderFromCart(orderId, userId, session);
+      await seedDeliveryForOrder(orderId, session);
+      await notifyOrderConfirmed(userId, orderId, orderDoc.total, session);
+
+      await AuditLog.create(
+        [
+          {
+            actorType: "system",
+            entityType: "order",
+            entityId: orderId,
+            action: "cod_order_created",
+            payload: { amount: preview.total },
+          },
+        ],
+        { session },
+      );
+
+      await orderDoc.save({ session });
+    }
+
+    await session.commitTransaction();
+
+    return {
+      order: orderDoc,
+      preview,
+      paymentMethod,
+      nextStep:
+        paymentMethod === "cod"
+          ? "order_confirmed"
+          : "initiate_payment",
+    };
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
 }

@@ -5,6 +5,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import {
   initiatePayment,
   confirmMockPayment,
+  confirmCodOrder,
 } from "../services/paymentService.js";
 import { Payment } from "../models/Payment.js";
 import { Errors } from "../utils/errors.js";
@@ -37,6 +38,15 @@ router.post("/mock/confirm", async (req: AuthRequest, res, next) => {
         body.success,
       ),
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/cod/confirm", async (req: AuthRequest, res, next) => {
+  try {
+    const body = z.object({ orderId: z.string() }).parse(req.body);
+    res.json(await confirmCodOrder(body.orderId, req.user!._id));
   } catch (err) {
     next(err);
   }

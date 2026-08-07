@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -15,11 +16,12 @@ import disputeRoutes from "./routes/disputes.js";
 import notificationRoutes from "./routes/notifications.js";
 import adminRoutes from "./routes/admin.js";
 import resolvrRoutes from "./routes/resolvr.js";
+import storeRoutes from "./routes/store.js";
 
 export function createApp() {
   const app = express();
 
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.use(
     cors({
       origin: env.CORS_ORIGIN,
@@ -30,6 +32,8 @@ export function createApp() {
   app.use(express.json());
   app.use(cookieParser());
 
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
@@ -38,6 +42,11 @@ export function createApp() {
     });
   });
 
+  app.get("/api/docs", (_req, res) => {
+    res.sendFile(path.join(process.cwd(), "openapi.json"));
+  });
+
+  app.use("/api/store", storeRoutes);
   app.use("/api/auth", authRoutes);
   app.use("/api/catalog", catalogRoutes);
   app.use("/api/cart", cartRoutes);

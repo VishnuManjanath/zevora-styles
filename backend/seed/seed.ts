@@ -334,10 +334,107 @@ async function seed() {
     paidAt: deliveredAt,
   });
 
+  // Fraud demo order — fake@demo.com
+  await Order.create({
+    orderId: "ORD-7843",
+    userId: faker._id,
+    status: "delivered",
+    paymentStatus: "paid",
+    subtotal: 129900,
+    shippingFee: 0,
+    total: 129900,
+    addressSnapshot: {
+      line1: "99 Test Lane",
+      city: "Kochi",
+      state: "Kerala",
+      pincode: "682001",
+    },
+    deliveredAt: deliveredAt,
+  });
+
+  await OrderItem.create({
+    orderId: "ORD-7843",
+    productId: (await Product.findOne({ sku: "ZS-001" }))!._id,
+    variantId: variantMap["ZS-001"],
+    productName: "Jaipur Block Print Kurti",
+    size: "M",
+    sku: "ZS-001-M",
+    unitSerial: "ZS-001-9912",
+    quantity: 1,
+    unitPrice: 129900,
+    lineTotal: 129900,
+  });
+
+  await Payment.create({
+    orderId: "ORD-7843",
+    amount: 129900,
+    method: "razorpay_mock",
+    status: "paid",
+    paidAt: deliveredAt,
+  });
+
+  // In-transit order — delivery delay demo
+  await Order.create({
+    orderId: "ORD-7840",
+    userId: arjun._id,
+    status: "shipped",
+    paymentStatus: "paid",
+    subtotal: 189900,
+    shippingFee: 0,
+    total: 189900,
+    addressSnapshot: {
+      line1: "12 Temple Road",
+      city: "Thrissur",
+      state: "Kerala",
+      pincode: "680001",
+    },
+    promisedDeliveryAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
+  });
+
+  await OrderItem.create({
+    orderId: "ORD-7840",
+    productId: (await Product.findOne({ sku: "ZS-003" }))!._id,
+    variantId: variantMap["ZS-003"],
+    productName: "Cotton Kurta Set",
+    size: "M",
+    sku: "ZS-003-M",
+    unitSerial: "ZS-003-4521",
+    quantity: 1,
+    unitPrice: 189900,
+    lineTotal: 189900,
+  });
+
+  await Payment.create({
+    orderId: "ORD-7840",
+    amount: 189900,
+    method: "razorpay_mock",
+    status: "paid",
+    paidAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+  });
+
+  await DeliveryTracking.create({
+    orderId: "ORD-7840",
+    carrier: "mock_delhivery",
+    trackingId: "DLV-MOCK-7840",
+    status: "in_transit",
+    currentLocation: "Thrissur Hub",
+  });
+
+  await DeliveryEvent.insertMany([
+    {
+      orderId: "ORD-7840",
+      status: "shipped",
+      description: "Package stuck at hub",
+      location: "Thrissur Hub",
+      occurredAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+    },
+  ]);
+
   console.log("Seed complete!");
   console.log("Demo: arjun@demo.com / demo1234");
+  console.log("Fraud: fake@demo.com / demo1234");
   console.log("Admin: admin@zevora.com / admin1234");
-  console.log("Order ORD-7842 serial ZS-001-2847 Rs 1299");
+  console.log("Orders: ORD-7842 (HITL), ORD-7843 (fraud), ORD-7844 (auto), ORD-7840 (delay)");
 
   await disconnectDb();
 }

@@ -12,6 +12,11 @@ import {
   issueRefund,
   createNotification,
 } from "../services/resolvrService.js";
+import {
+  createReturnPickup,
+  restockItem,
+  createPayoutLink,
+} from "../services/supplementalService.js";
 import { Errors } from "../utils/errors.js";
 
 const router = Router();
@@ -130,6 +135,59 @@ router.patch("/disputes/:id", async (req, res, next) => {
 router.get("/policy", async (_req, res, next) => {
   try {
     res.json(await getPolicyPack());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/returns/pickup", async (req, res, next) => {
+  try {
+    const body = z.object({
+      orderId: z.string(),
+      disputeId: z.string().optional(),
+      scheduledAt: z.string().datetime().optional(),
+      addressSnapshot: z.record(z.unknown()).optional(),
+    }).parse(req.body);
+
+    const pickup = await createReturnPickup({
+      orderId: body.orderId,
+      disputeId: body.disputeId,
+      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : undefined,
+      addressSnapshot: body.addressSnapshot,
+    });
+    res.status(201).json({ pickup });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/inventory/restock", async (req, res, next) => {
+  try {
+    const body = z.object({
+      variantId: z.string(),
+      quantity: z.number().int().positive(),
+      reason: z.string().optional(),
+      referenceId: z.string().optional(),
+    }).parse(req.body);
+
+    res.status(201).json(await restockItem(body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/payouts", async (req, res, next) => {
+  try {
+    const body = z.object({
+      userId: z.string(),
+      orderId: z.string(),
+      disputeId: z.string().optional(),
+      amount: z.number().int().positive(),
+      upiId: z.string().optional(),
+    }).parse(req.body);
+
+    const link = await createPayoutLink(body);
+    res.status(201).json({ payoutLink: link });
   } catch (err) {
     next(err);
   }

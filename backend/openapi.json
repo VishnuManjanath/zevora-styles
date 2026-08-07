@@ -1,0 +1,73 @@
+{
+  "name": "Zevora Styles API",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:4000",
+  "auth": {
+    "customer": "Bearer JWT from POST /api/auth/login",
+    "admin": "JWT with role admin",
+    "resolvr": "Header X-Resolvr-Key"
+  },
+  "endpoints": {
+    "health": "GET /api/health",
+    "store": "GET /api/store",
+    "auth": {
+      "register": "POST /api/auth/register",
+      "login": "POST /api/auth/login",
+      "logout": "POST /api/auth/logout",
+      "me": "GET /api/auth/me"
+    },
+    "catalog": {
+      "categories": "GET /api/catalog/categories",
+      "products": "GET /api/catalog/products",
+      "product": "GET /api/catalog/products/:sku",
+      "search": "GET /api/catalog/search?q=",
+      "featured": "GET /api/catalog/featured"
+    },
+    "cart": {
+      "get": "GET /api/cart",
+      "add": "POST /api/cart/items",
+      "update": "PATCH /api/cart/items/:variantId",
+      "remove": "DELETE /api/cart/items/:variantId",
+      "clear": "DELETE /api/cart"
+    },
+    "addresses": "GET|POST /api/addresses, PATCH|DELETE /api/addresses/:id",
+    "checkout": {
+      "preview": "POST /api/checkout/preview",
+      "createOrder": "POST /api/checkout/create-order { addressId, paymentMethod?: razorpay_mock|cod }"
+    },
+    "payments": {
+      "initiate": "POST /api/payments/initiate",
+      "mockConfirm": "POST /api/payments/mock/confirm { orderId, success }",
+      "codConfirm": "POST /api/payments/cod/confirm",
+      "status": "GET /api/payments/:orderId"
+    },
+    "orders": {
+      "list": "GET /api/orders",
+      "detail": "GET /api/orders/:orderId",
+      "tracking": "GET /api/orders/:orderId/tracking",
+      "cancel": "POST /api/orders/:orderId/cancel"
+    },
+    "disputes": {
+      "open": "POST /api/disputes",
+      "list": "GET /api/disputes",
+      "detail": "GET /api/disputes/:id",
+      "message": "POST /api/disputes/:id/messages",
+      "evidence": "POST /api/disputes/:id/evidence (multipart file)",
+      "captureSession": "POST /api/disputes/:id/capture-session"
+    },
+    "notifications": "GET /api/notifications, PATCH /api/notifications/:id/read",
+    "admin": "GET|POST|PATCH /api/admin/* (admin JWT)",
+    "resolvr": {
+      "order": "GET /api/resolvr/orders/:orderId",
+      "delivery": "GET /api/resolvr/orders/:orderId/delivery",
+      "customerHistory": "GET /api/resolvr/customers/:userId/history",
+      "refund": "POST /api/resolvr/refunds",
+      "notify": "POST /api/resolvr/notify",
+      "disputes": "POST|PATCH /api/resolvr/disputes",
+      "policy": "GET /api/resolvr/policy",
+      "returnPickup": "POST /api/resolvr/returns/pickup",
+      "restock": "POST /api/resolvr/inventory/restock",
+      "payout": "POST /api/resolvr/payouts"
+    }
+  }
+}

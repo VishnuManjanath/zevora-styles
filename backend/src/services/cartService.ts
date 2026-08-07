@@ -3,22 +3,39 @@ import { Cart } from "../models/Cart.js";
 import { Product, ProductVariant } from "../models/Product.js";
 import { Errors } from "../utils/errors.js";
 
-async function findOrCreateCart(userId?: Types.ObjectId, sessionId?: string) {
-  if (userId) {
-    let cart = await Cart.findOne({ userId });
-    if (!cart) cart = await Cart.create({ userId, items: [] });
+interface CartContext {
+  userId?: Types.ObjectId;
+  sessionId?: string;
+}
+
+interface EnrichedCartItem {
+  id: string;
+  variantId: string;
+  productId: string;
+  quantity: number;
+  product: { sku: string; name: string; images: { url: string; alt?: string; sort: number }[] };
+  size: string;
+  price: number;
+  lineTotal: number;
+  inStock: boolean;
+}
+
+async function findOrCreateCart(ctx: CartContext) {
+  if (ctx.userId) {
+    let cart = await Cart.findOne({ userId: ctx.userId });
+    if (!cart) cart = await Cart.create({ userId: ctx.userId, items: [] });
     return cart;
   }
-  if (sessionId) {
-    let cart = await Cart.findOne({ sessionId });
-    if (!cart) cart = await Cart.create({ sessionId, items: [] });
+  if (ctx.sessionId) {
+    let cart = await Cart.findOne({ sessionId: ctx.sessionId });
+    if (!cart) cart = await Cart.create({ sessionId: ctx.sessionId, items: [] });
     return cart;
   }
   throw Errors.badRequest("NO_CART", "User or session required");
 }
 
-export async function getCart(userId?: Types.ObjectId, sessionId?: string) {
-  const cart = await findOrCreateCart(userId, sessionId);
+export async function getCart(ctx: CartContext) {
+  const cart = await findOrCreateCart(ctx);
   return await enrichCart(cart);
 }
 
@@ -47,7 +64,10 @@ async function enrichCart(cart: InstanceType<typeof Cart>) {
     }),
   );
 
-  const validItems = items.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof items[number]>>>[];
+  const validItems: EnrichedCartItem[] = [];
+  for (const item of items) {
+    if (item) validItems.push(item);
+  }
   const subtotal = validItems.reduce((sum, i) => sum + i.lineTotal, 0);
 
   return {
@@ -59,8 +79,7 @@ async function enrichCart(cart: InstanceType<typeof Cart>) {
 }
 
 export async function addToCart(
-  userId?: Types.ObjectId,
-  sessionId?: string,
+  ctx: CartContext,
   variantId: string,
   quantity: number,
 ) {
@@ -70,7 +89,7 @@ export async function addToCart(
     throw Errors.badRequest("INSUFFICIENT_STOCK", "Not enough stock");
   }
 
-  const cart = await findOrCreateCart(userId, sessionId);
+  const cart = await findOrCreateCart(ctx);
   const existing = cart.items.find((i) => String(i.variantId) === variantId);
 
   if (existing) {
@@ -90,12 +109,11 @@ export async function addToCart(
 }
 
 export async function updateCartItem(
-  userId?: Types.ObjectId,
-  sessionId?: string,
+  ctx: CartContext,
   variantId: string,
   quantity: number,
 ) {
-  const cart = await findOrCreateCart(userId, sessionId);
+  const cart = await findOrCreateCart(ctx);
   const item = cart.items.find((i) => String(i.variantId) === variantId);
   if (!item) throw Errors.notFound("Cart item not found");
 
@@ -114,20 +132,16 @@ export async function updateCartItem(
   return await enrichCart(cart);
 }
 
-export async function removeCartItem(
-  userId?: Types.ObjectId,
-  sessionId?: string,
-  variantId: string,
-) {
-  const cart = await findOrCreateCart(userId, sessionId);
+export async function removeCartItem(ctx: CartContext, variantId: string) {
+  const cart = await findOrCreateCart(ctx);
   cart.items = cart.items.filter((i) => String(i.variantId) !== variantId);
   cart.updatedAt = new Date();
   await cart.save();
   return await enrichCart(cart);
 }
 
-export async function clearCart(userId?: Types.ObjectId, sessionId?: string) {
-  const cart = await findOrCreateCart(userId, sessionId);
+export async function clearCart(ctx: CartContext) {
+  const cart = await findOrCreateCart(ctx);
   cart.items = [];
   cart.updatedAt = new Date();
   await cart.save();

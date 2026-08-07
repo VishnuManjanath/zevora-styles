@@ -9,7 +9,11 @@ import {
   addDisputeMessage,
   createCaptureSession,
 } from "../services/disputeService.js";
+import { uploadDisputeEvidence } from "../services/evidenceService.js";
+import { evidenceUpload } from "../middleware/upload.js";
 import type { ClaimType } from "../models/Dispute.js";
+import { Errors } from "../utils/errors.js";
+import { routeParam } from "../utils/routeParam.js";
 
 const router = Router();
 
@@ -53,7 +57,7 @@ router.get("/", async (req: AuthRequest, res, next) => {
 
 router.get("/:id", async (req: AuthRequest, res, next) => {
   try {
-    res.json(await getDisputeDetail(req.params.id, req.user!._id));
+    res.json(await getDisputeDetail(routeParam(req.params.id), req.user!._id));
   } catch (err) {
     next(err);
   }
@@ -63,7 +67,7 @@ router.post("/:id/messages", async (req: AuthRequest, res, next) => {
   try {
     const body = z.object({ body: z.string().min(1) }).parse(req.body);
     const message = await addDisputeMessage(
-      req.params.id,
+      routeParam(req.params.id),
       req.user!._id,
       body.body,
     );
@@ -73,9 +77,38 @@ router.post("/:id/messages", async (req: AuthRequest, res, next) => {
   }
 });
 
+router.post("/:id/evidence", async (req: AuthRequest, res, next) => {
+  try {
+    evidenceUpload.single("file")(req, res, async (err) => {
+      if (err) return next(Errors.badRequest("UPLOAD_FAILED", err.message));
+      if (!req.file) {
+        return next(Errors.badRequest("NO_FILE", "No file uploaded"));
+      }
+      try {
+        const fileUrl = `/uploads/${req.file.filename}`;
+        const evidence = await uploadDisputeEvidence(
+          routeParam(req.params.id),
+          req.user!._id,
+          fileUrl,
+          {
+            originalName: req.file.originalname,
+            mimeType: req.file.mimetype,
+            size: req.file.size,
+          },
+        );
+        res.status(201).json({ evidence });
+      } catch (e) {
+        next(e);
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/:id/capture-session", async (req: AuthRequest, res, next) => {
   try {
-    res.json(await createCaptureSession(req.params.id, req.user!._id));
+    res.json(await createCaptureSession(routeParam(req.params.id), req.user!._id));
   } catch (err) {
     next(err);
   }

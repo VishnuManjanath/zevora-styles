@@ -9,7 +9,7 @@ Ethnic D2C e-commerce for **Zevora Styles** — kurtis, dupattas, and kurta sets
 | Frontend | Next.js (later) — `frontend/` |
 | Backend | Express + TypeScript — `backend/` |
 | Database | MongoDB + Mongoose |
-| Payments | Razorpay mock (no real keys) |
+| Payments | Razorpay mock + COD |
 
 ## Ports
 
@@ -18,67 +18,66 @@ Ethnic D2C e-commerce for **Zevora Styles** — kurtis, dupattas, and kurta sets
 | Express API | http://localhost:4000 |
 | Next.js (later) | http://localhost:3000 |
 | MongoDB | mongodb://localhost:27017/zevora |
+| API docs | http://localhost:4000/api/docs |
 
 ## Quick start
 
 ```bash
-# Start MongoDB
-docker compose up -d
+docker start zevora-mongo   # or: docker run -d --name zevora-mongo -p 27017:27017 mongo:7
 
-# Backend
 cd backend
 cp .env.example .env
 npm install
-npm run seed    # seed products, users, demo order ORD-7842
-npm run dev     # http://localhost:4000
+npm run seed
+npm run dev
 ```
 
-## Demo accounts (after seed)
+## Demo accounts
 
 | Email | Password | Role |
 |-------|----------|------|
 | `arjun@demo.com` | `demo1234` | customer |
-| `fake@demo.com` | `demo1234` | customer |
+| `fake@demo.com` | `demo1234` | customer (fraud demos) |
 | `admin@zevora.com` | `admin1234` | admin |
 
-## Demo fixtures
+## Demo orders (after seed)
 
-- Order: `ORD-7842` — Jaipur Kurti, Rs 1,299, serial `ZS-001-2847`
-- Auto-resolve cap: Rs 800 (HITL triggers above this)
-- Policy clause: `4.2` — damaged on arrival
+| Order | User | Purpose |
+|-------|------|---------|
+| `ORD-7842` | Arjun | HITL beat — Rs 1,299, serial `ZS-001-2847` |
+| `ORD-7843` | fake@ | Fraud beat — serial `ZS-001-9912` |
+| `ORD-7844` | Arjun | Auto-resolve under Rs 800 cap |
+| `ORD-7840` | Arjun | Delivery delay (stuck at hub) |
 
-## API overview
+## E-commerce features
 
-- `POST /api/auth/register` · `POST /api/auth/login`
-- `GET /api/catalog/products` · `GET /api/catalog/products/:sku`
-- `GET /api/cart` · `POST /api/cart/items`
-- `POST /api/checkout/preview` · `POST /api/checkout/create-order`
-- `POST /api/payments/initiate` · `POST /api/payments/mock/confirm`
-- `GET /api/orders` · `GET /api/orders/:orderId`
-- `POST /api/disputes` — open dispute
-- `GET /api/admin/*` — admin routes (JWT + admin role)
-- `GET /api/resolvr/*` — Resolvr integration (`X-Resolvr-Key` header)
+- Auth (register, login, JWT)
+- Catalog (categories, products, search, filters)
+- Guest + user cart
+- Addresses CRUD
+- Checkout preview + create order
+- **Razorpay mock** (initiate + success/fail)
+- **COD** orders (pay on delivery)
+- Order history, tracking, cancel (unpaid)
+- Open dispute, messages, evidence upload, capture session
+- Notifications (in-app + mock SMS/email log)
+- Admin dashboard, products, orders, disputes, policy, HITL, refunds
 
 ## Resolvr integration
 
-Resolvr (separate repo) calls internal routes with header:
+Header: `X-Resolvr-Key` (from `backend/.env`)
 
-```text
-X-Resolvr-Key: <RESOLVR_API_KEY from .env>
-```
+| Endpoint | Tool |
+|----------|------|
+| `GET /api/resolvr/orders/:orderId` | get_order |
+| `GET /api/resolvr/orders/:orderId/delivery` | get_delivery_status |
+| `GET /api/resolvr/customers/:userId/history` | get_customer_history |
+| `POST /api/resolvr/refunds` | issue_refund (guardrailed) |
+| `POST /api/resolvr/notify` | notify |
+| `POST/PATCH /api/resolvr/disputes` | create/update_dispute |
+| `GET /api/resolvr/policy` | get_policy_pack |
+| `POST /api/resolvr/returns/pickup` | create_return_pickup |
+| `POST /api/resolvr/inventory/restock` | restock_item |
+| `POST /api/resolvr/payouts` | payout_link (COD refunds) |
 
-Key endpoints:
-
-- `GET /api/resolvr/orders/:orderId`
-- `GET /api/resolvr/orders/:orderId/delivery`
-- `GET /api/resolvr/customers/:userId/history`
-- `POST /api/resolvr/refunds`
-- `POST /api/resolvr/notify`
-- `POST /api/resolvr/disputes` · `PATCH /api/resolvr/disputes/:id`
-- `GET /api/resolvr/policy`
-
-## Health check
-
-```bash
-curl http://localhost:4000/api/health
-```
+Auto-resolve cap: **Rs 800** (80000 paise). Clause **4.2** = damaged on arrival.

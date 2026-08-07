@@ -6,6 +6,8 @@ import {
   getOrderDetail,
   getDeliveryTracking,
 } from "../services/orderService.js";
+import { cancelOrder } from "../services/supplementalService.js";
+import { routeParam } from "../utils/routeParam.js";
 
 const router = Router();
 
@@ -19,10 +21,19 @@ router.get("/", async (req: AuthRequest, res, next) => {
   }
 });
 
+router.post("/:orderId/cancel", async (req: AuthRequest, res, next) => {
+  try {
+    const order = await cancelOrder(routeParam(req.params.orderId), req.user!._id);
+    res.json({ order });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:orderId", async (req: AuthRequest, res, next) => {
   try {
     res.json(
-      await getOrderDetail(req.params.orderId, req.user!._id),
+      await getOrderDetail(routeParam(req.params.orderId), req.user!._id),
     );
   } catch (err) {
     next(err);
@@ -32,7 +43,7 @@ router.get("/:orderId", async (req: AuthRequest, res, next) => {
 router.get("/:orderId/tracking", async (req: AuthRequest, res, next) => {
   try {
     res.json(
-      await getDeliveryTracking(req.params.orderId, req.user!._id),
+      await getDeliveryTracking(routeParam(req.params.orderId), req.user!._id),
     );
   } catch (err) {
     next(err);
