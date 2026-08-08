@@ -10,3 +10,5 @@ coverage/
 .idea/
 .vscode/
 *.tsbuildinfo
+# Contains literal deployment secrets — never commit.
+.railway/
