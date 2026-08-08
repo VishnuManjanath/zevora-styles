@@ -91,7 +91,15 @@ Everything else — customer accounts, addresses, orders, disputes — is create
 
 ## Deploying to Railway
 
-This is a monorepo with two independently deployable apps (`backend/`, `frontend/`), plus a database. Railway deploys straight from GitHub, so push this repo first, then set up **three** pieces: a MongoDB database, the backend service, and the frontend service.
+This is a monorepo with two independently deployable apps (`backend/`, `frontend/`), plus a self-hosted MongoDB. All three run as separate services inside one Railway project. This section documents the setup that is actually live, so you can reproduce or debug it.
+
+### Live services (this project)
+
+| Service | Source | Public URL |
+|---|---|---|
+| `backend` | GitHub repo, root dir `backend/` | `https://backend-production-4c32b.up.railway.app` |
+| `frontend` | GitHub repo, root dir `frontend/` | `https://frontend-production-2774.up.railway.app` |
+| `mongo` | Docker image `mongo:8.0` (not Railway's managed Mongo plugin) | none (private network only) |
 
 ### 0. Push to GitHub
 
@@ -101,53 +109,63 @@ git commit -m "Prepare for Railway deployment"
 git push
 ```
 
-### 1. Database — MongoDB Atlas (not Railway's Mongo plugin)
+### 1. Database — self-hosted `mongo:8.0`, not Railway's Mongo plugin
 
-The backend uses Mongoose **transactions** (order/refund atomicity), which require MongoDB to run as a replica set. Railway's built-in Mongo template runs a single standalone `mongod`, so transactions fail there. MongoDB Atlas's free **M0** tier is a proper replica set out of the box, so use that instead:
+The backend uses Mongoose **transactions** (order/refund atomicity), which require MongoDB to run as a replica set. Railway's built-in Mongo template runs a single standalone `mongod`, so transactions fail there. Instead, this project runs its own `mongo:8.0` image as a generic Railway service:
 
-1. Create a free cluster at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas).
-2. Database Access → add a user + password.
-3. Network Access → add `0.0.0.0/0` (allow access from anywhere, since Railway's outbound IPs aren't static).
-4. Copy the connection string (`mongodb+srv://<user>:<password>@.../zevora?retryWrites=true&w=majority`) — this is your `MONGODB_URI`.
+1. Railway dashboard → **New → Empty Service** (or `railway add --service mongo` from the CLI), then set its **Source** to the Docker image `mongo:8.0`.
+2. Attach a volume mounted at `/data/db` (Settings → Volumes).
+3. **Settings → Deploy → Start Command** → `mongod --replSet rs0`.
+4. There are deliberately **no** `MONGO_INITDB_ROOT_USERNAME`/`PASSWORD` variables set — a custom start command bypasses the image's normal entrypoint script, so those variables would never actually create a user, and setting them would only cause the backend to try (and fail) to authenticate as a user that doesn't exist. Auth is therefore disabled; the database is reachable only from other services on Railway's private network (`mongo.railway.internal:27017`), which is an acceptable trade-off for a self-hosted single-node demo database. Don't expose a public TCP proxy on this service except temporarily (see "Reseeding / debugging" below).
+5. After the very first deploy, the replica set needs to be initiated once (single node, so this only needs to happen once per fresh volume):
+   ```js
+   // via a temporary TCP proxy — see "Reseeding / debugging" below — run:
+   db.adminCommand({ replSetInitiate: { _id: "rs0", members: [{ _id: 0, host: "mongo.railway.internal:27017" }] } })
+   ```
 
 ### 2. Backend service on Railway
 
-1. Railway dashboard → **New Project → Deploy from GitHub repo** → select this repo.
-2. On the created service: **Settings → Root Directory** → `backend`.
-3. **Variables**, add:
-   - `MONGODB_URI` — the Atlas connection string from step 1
+1. Railway dashboard → **New → GitHub Repo** → select this repo, then **Settings → Root Directory** → `backend`.
+2. **Variables**, add:
+   - `MONGODB_URI` — `mongodb://mongo.railway.internal:27017/zevora?replicaSet=rs0`
    - `JWT_SECRET` — any long random string
    - `RESOLVR_API_KEY` — any long random string (share this with Resolvr)
-   - `CORS_ORIGIN` — leave as `http://localhost:3000` for now, you'll update it in step 4
+   - `CORS_ORIGIN` — the frontend's public URL (see step 4)
    - `NODE_ENV` — `production`
    - (`PORT` is injected automatically by Railway — don't set it manually)
-4. **Settings → Networking → Generate Domain** to get a public URL like `zevora-backend.up.railway.app`.
-5. Deploy will pick up `backend/railway.json` automatically (build: `npm run build`, start: `npm run start`, health check: `/api/health`).
-6. Seed the production database once, from your machine, using the Atlas URI directly:
-   ```bash
-   cd backend
-   MONGODB_URI="<atlas-uri>" JWT_SECRET=x RESOLVR_API_KEY=x npm run seed
-   ```
-   This only creates the catalog, policy pack, and the admin account — no mock orders (see below).
+3. **Settings → Networking → Generate Domain** to get a public URL.
+4. Build/start/health-check come from `backend/railway.json` (Config as Code) — `npm run build`, `npm run start`, health check `/api/health`. Note there's **no** custom install step; devDependencies (TypeScript, `tsx`) are needed at build time, which normally get skipped under `NODE_ENV=production` — this is why `NPM_CONFIG_PRODUCTION=false` is also set as a backend variable, so `npm ci` always installs them regardless of `NODE_ENV`.
+5. Seed the production database once (see "Reseeding / debugging" below). This only creates the catalog, policy pack, and the admin account — no mock orders.
 
 ### 3. Frontend service on Railway
 
-1. Same project → **New → GitHub Repo** → this repo again (creates a second service).
-2. **Settings → Root Directory** → `frontend`.
-3. **Variables**, add:
-   - `NEXT_PUBLIC_API_URL` — the backend's public URL from step 2.4 (e.g. `https://zevora-backend.up.railway.app`)
-4. **Settings → Networking → Generate Domain** to get the storefront's public URL.
-5. Deploy picks up `frontend/railway.json` automatically (build: `npm run build`, start: `npm run start`).
+1. Same project → **New → GitHub Repo** → this repo again (creates a second service) → **Settings → Root Directory** → `frontend`.
+2. **Variables**, add:
+   - `NEXT_PUBLIC_API_URL` — the backend's public URL from step 2.3
+3. **Settings → Networking → Generate Domain** to get the storefront's public URL.
+4. Build/start come from `frontend/railway.json` — `npm run build`, `npm run start` (which binds to Railway's injected `$PORT`).
 
 ### 4. Close the loop: update backend CORS
 
-Now that the frontend has a public URL, go back to the **backend** service's variables and set:
+Once the frontend has a public URL, set on the **backend** service:
 
 ```
 CORS_ORIGIN=https://<your-frontend-domain>.up.railway.app
 ```
 
 (Comma-separate multiple origins if needed, e.g. to also keep `http://localhost:3000` for local testing against the prod API.) Redeploy the backend for this to take effect.
+
+### Reseeding / debugging the live database
+
+`mongo.railway.internal` is only reachable from other Railway services, not from your machine. To run the seed script or inspect the database directly from a laptop, temporarily expose it:
+
+```bash
+railway tcp-proxy create --port 27017 --service mongo   # prints a public host:port
+cd backend
+MONGODB_URI="mongodb://<proxy-host>:<proxy-port>/zevora?directConnection=true" \
+  JWT_SECRET=x RESOLVR_API_KEY=x npm run seed
+railway tcp-proxy delete <proxy-id> --service mongo --yes   # close it back up afterwards
+```
 
 ### Known limitation
 
